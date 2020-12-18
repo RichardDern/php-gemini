@@ -145,7 +145,7 @@ class Server
     }
 
     /**
-     * Define which file system adapter to use to serve files.
+     * Define which file system adapter to use to serve files. Chainable method.
      *
      * @return self
      */
@@ -163,7 +163,7 @@ class Server
     }
 
     /**
-     * Define which certificate the server should use.
+     * Define which certificate the server should use. Chainable method.
      *
      * @return self
      */

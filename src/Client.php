@@ -9,6 +9,7 @@ use Monolog\Logger;
 use React\EventLoop\Factory as LoopFactory;
 use React\Socket\ConnectionInterface;
 use React\Socket\Connector;
+use RichardDern\Gemini\Constants\ResponseStatusCodes;
 use RichardDern\Gemini\Exceptions\InvalidMetaException;
 use RichardDern\Gemini\Exceptions\InvalidStatusException;
 use RichardDern\Gemini\Traits\HandlesUri;
@@ -80,6 +81,20 @@ class Client
      */
     protected $request;
 
+    /**
+     * Keep a history of redirections for the last request.
+     *
+     * @var array
+     */
+    protected $redirections = [];
+
+    /**
+     * Maximum number of redirections to follow.
+     *
+     * @var int
+     */
+    protected $maxRedirections = 10;
+
     // -------------------------------------------------------------------------
     // ----[ Methods ]----------------------------------------------------------
     // -------------------------------------------------------------------------
@@ -122,6 +137,16 @@ class Client
     public function getRequestedUri()
     {
         return $this->requestedUri;
+    }
+
+    /**
+     * Return redirections logged for the last request.
+     *
+     * @return array
+     */
+    public function getRedirections()
+    {
+        return $this->redirections;
     }
 
     // ----[ Mutators ]---------------------------------------------------------
@@ -309,6 +334,8 @@ class Client
             if (!\is_numeric($status)) {
                 throw InvalidStatusException();
             }
+
+            $status = (int) $status;
         }
 
         if (array_key_exists('meta', $matches)) {
@@ -323,10 +350,41 @@ class Client
             $body = trim($matches['body']);
         }
 
+        if ($status === ResponseStatusCodes::TEMPORARY_REDIRECT || $status === ResponseStatusCodes::PERMANENT_REDIRECT) {
+            return $this->handleRedirection($status, $meta);
+        }
+
         $response = new Response($status, $meta, $body);
 
         $this->logger->debug('Response parsed', [$response]);
 
         return $response;
+    }
+
+    /**
+     * Handle a redirection.
+     *
+     * @param int    $status Response status code
+     * @param string $meta   Response meta
+     */
+    protected function handleRedirection(int $status, string $meta)
+    {
+        if (count($this->redirections) === $this->maxRedirections) {
+            $this->logger->error('Maximum redirections reached');
+
+            throw new TooManyRedirectionsException();
+        }
+
+        $permanent   = $status === ResponseStatusCodes::PERMANENT_REDIRECT;
+        $redirectUri = $this->parseUri($meta);
+
+        $this->logger->debug('Redirection', ['Uri' => (string) $redirectUri, 'Permanent' => $permanent]);
+
+        $this->redirections[] = [
+            'uri'       => $redirectUri,
+            'permanent' => $permanent,
+        ];
+
+        return $this->request($redirectUri);
     }
 }
