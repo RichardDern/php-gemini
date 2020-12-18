@@ -52,6 +52,13 @@ class Server
      */
     protected $connection;
 
+    /**
+     * Full path to certificate.
+     *
+     * @var string
+     */
+    protected $certPath;
+
     // -------------------------------------------------------------------------
     // ----[ Methods ]----------------------------------------------------------
     // -------------------------------------------------------------------------
@@ -62,13 +69,14 @@ class Server
      * @param null|string $address
      * @param array       $config  Server configuration
      */
-    public function __construct($address = null, int $port = 1965, string $root = './www')
+    public function __construct($address = null, int $port = 1965, string $root = './www', string $certPath = '../localhost.pem')
     {
         $this->prepareLogger('Server', Logger::DEBUG);
 
-        $this->address = $address;
-        $this->port    = $port;
-        $this->root    = $root;
+        $this->address  = $address;
+        $this->port     = $port;
+        $this->root     = $root;
+        $this->certPath = $certPath;
     }
 
     /**
@@ -236,11 +244,11 @@ class Server
     protected function createSecureServer()
     {
         $this->logger->debug('Creating Secure server...', [
-            'local_cert' => '../localhost.pem',
+            'local_cert' => $this->certPath,
         ]);
 
         $server = new SecureServer($this->createTcpServer(), $this->loop, [
-            'local_cert' => '../localhost.pem',
+            'local_cert' => $this->certPath,
         ]);
 
         $this->logger->debug('Created Secure server');
