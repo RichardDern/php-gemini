@@ -9,10 +9,12 @@ use PHPUnit\Framework\TestCase;
  */
 final class ClientTest extends TestCase
 {
+    private $testServer ='127.0.0.1';
+
     public function testCanSetStringUri(): void
     {
-        $client = new RichardDern\Gemini\Client('gemini.circumlunar.space');
-        $client->setBaseUri('gemini://gemini.circumlunar.space/software/');
+        $client = new RichardDern\Gemini\Client($this->testServer);
+        $client->setBaseUri('gemini://'.$this->testServer.'/software/');
 
         $this->assertInstanceOf(
             League\Uri\Uri::class,
@@ -22,8 +24,8 @@ final class ClientTest extends TestCase
 
     public function testCanSetUriObject(): void
     {
-        $client = new RichardDern\Gemini\Client('gemini.circumlunar.space');
-        $uri    = League\Uri\Uri::createFromString('gemini://gemini.circumlunar.space/software/');
+        $client = new RichardDern\Gemini\Client($this->testServer);
+        $uri    = League\Uri\Uri::createFromString('gemini://'.$this->testServer.'/software/');
         $client->setBaseUri($uri);
 
         $this->assertInstanceOf(
@@ -36,30 +38,30 @@ final class ClientTest extends TestCase
     {
         $this->expectException(League\Uri\Exceptions\SyntaxError::class);
 
-        $client = new RichardDern\Gemini\Client('gemini.circumlunar.space');
+        $client = new RichardDern\Gemini\Client($this->testServer);
         $client->setBaseUri(['malformed url']);
     }
 
     public function testResolvesRelativeUri(): void
     {
-        $client = new RichardDern\Gemini\Client('gemini.circumlunar.space');
-        $client->setBaseUri('gemini://gemini.circumlunar.space');
+        $client = new RichardDern\Gemini\Client($this->testServer);
+        $client->setBaseUri('gemini://'.$this->testServer);
         $client->request('/software/');
 
         $this->assertEquals(
             (string) $client->getRequestedUri(),
-            'gemini://gemini.circumlunar.space:1965/software/'
+            'gemini://'.$this->testServer.':1965/software/'
         );
     }
 
     public function testMissingSchemeUri(): void
     {
-        $client = new RichardDern\Gemini\Client('gemini.circumlunar.space');
-        $client->request('gemini.circumlunar.space/software/');
+        $client = new RichardDern\Gemini\Client($this->testServer);
+        $client->request($this->testServer.'/software/');
 
         $this->assertEquals(
             (string) $client->getRequestedUri(),
-            'gemini://gemini.circumlunar.space:1965/gemini.circumlunar.space/software/'
+            'gemini://'.$this->testServer.':1965/'.$this->testServer.'/software/'
         );
     }
 
@@ -74,11 +76,11 @@ final class ClientTest extends TestCase
     public function testNotThrowsMissingBaseUriExceptionWithAbsoluteUri(): void
     {
         $client = new RichardDern\Gemini\Client();
-        $client->request('gemini://gemini.circumlunar.space/software/');
+        $client->request('gemini://'.$this->testServer.'/software/');
 
         $this->assertEquals(
             (string) $client->getRequestedUri(),
-            'gemini://gemini.circumlunar.space/software/'
+            'gemini://'.$this->testServer.'/software/'
         );
     }
 }
