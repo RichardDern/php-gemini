@@ -19,130 +19,130 @@ case you don't or can't use an official one
 URIs as well, thanks to [league/uri](https://uri.thephpleague.com)
 - Extensive logging, thanks to [monolog](https://github.com/Seldaek/monolog)
 - Filesystem abstraction provided by [league/flysystem](https://flysystem.thephpleague.com/v2/docs/)
-allowing you to serve files from the local file-system, FTP, AWS and even in-memory
+allowing you to serve files from various locations
 
-## Client
+## Documentation
 
-### Simple example
+### Client
+
+To query a remote server, you first need to instanciate the _Client_ class:
 
 ```php
 use RichardDern\Gemini\Client;
 
-$client   = new Client('gemini.circumlunar.space');
-$response = $client->request('/software/');
-
-print_r($reponse);
-```
-
-The Response object will provide you access to response status code, response
-meta and body:
-
-```
-RichardDern\Gemini\Response Object
-(
-    [status] => 20
-    [meta] => text/gemini
-    [body] => # Gemini software
-
-Here is a list of all known Gemini-related software.
-[...]
-)
-```
-
-You can see the status code on the Appendix 1. of 
-[Gemini specifications](https://gemini.circumlunar.space/docs/specification.html).
-
-### Client class
-
-You can define the server you want to connect to when instanciating the
-client:
-
-```php
-$client = new Client('gemini.circumlunar.space', 1965);
-```
-
-Or later:
-
-```php
+// This will connect to a server running on the same computer
 $client = new Client();
-$client->setServer('gemini.circumlunar.space')->setPort(1965);
+
+// This will connect to a remote server on default port
+//$client = new Client('gemini.circumlunar.space');
+
+// And this will connect to a server using a custom port
+//$client = new Client('10.0.0.1', 1966);
+
+// You can define the server and remote port after instanciating the class,
+// or whenever you want before your query:
+$client->setServer('127.0.0.1');
+$client->setPort(1965);
 ```
 
-If you intend on using relative URIs, you must define the base URI 
-before making any request:
+You are ready to query the server:
 
 ```php
-$client->setBaseUri('gemini://gemini.circumlunar.space:1965');
+// You can define the base URI that will be used to resolve subsequent
+// relative queries
+$client->setBaseUri('gemini://127.0.0.1:1965/absolute_path');
+
+// This will then resolve to 
+// gemini://127.0.0.1:1965/absolute_path/relative_path/document
+$client->request('relative_path/document');
+
+// Or, you can request an absolute URI directly:
+$client->request('gemini://127.0.0.1:1965/absolute_path/relative_path/document');
 ```
 
-Note that this step is not required if you already have defined the
-target server, either in the class constructor or by calling the
-_setServer_ method.
+The result will be a _RichardDern\Gemini\Response_ object which exposes the
+following properties:
 
-Finally, you can send a request using the following:
+- _$status_, a two-digits status code ; you can see the full list of status
+codes in [Gemini's specifications](https://gemini.circumlunar.space/docs/specification.html), Appendix 1
+- _$meta_, containing various informations about the response such as MIME type,
+redirect URL or language, depending on server's response
+- _$body_, the raw, unformated content of response body
+
+### Server
+
+This library also allows you to run a Gemini server with ease.
 
 ```php
-$response = $client->request('gemini://gemini.circumlunar.space/software/');
+use RichardDern\Gemini\Server;
 
-$response = $client->request('/software/');
+// This will create a server on 127.0.0.1 and listening on default port (1965)
+$server = new Server();
+
+// You can set the binding address and port when instanciating the class...
+//$server = new Server('[::1]', 1966);
+
+// ...or after
+$server->setAddress('[::1]');
+$server->setPort(1965);
 ```
 
-The response object provides the following public properties:
-
-- _status_, a two-digits code that informs client about the response
-state
-- _meta_, which contains requested file's MIME type
-- _body_, response's body, requested file's content
-
-## Server
-
-### Simple example
+You are required to provide the server with the path to a certificate file prior
+to actually start the server.
 
 ```php
-$server = new RichardDern\Gemini\Server('0.0.0.0', 1965, '/var/www/gemini');
-$server->start();
+$server->setCertificatePath('./localhost.pem');
 ```
 
-Now you can query this server from another process. By default, files must be
-placed inside a _www_ folder where the server is run.
-
-### Server class
-
-You can specify the address and the port the server must bind to in
-the class constructor, as well as server's root directory, where it
-will look for requested files:
-
-```php
-$server = new Server('127.0.0.1', 4587, '/home/user/gemini');
-$server->start();
-```
-
-### VirtualHosts
-
-A - very - basic virtual hosts system is provided. It works simply by looking at
-the host provided in the requested URL. If a directory with that name exists in
-server's root directory, files will be served from there. 
-
-If there is no directory matching the hostname, the server will look for
-requested files in the _default_ directory, if it exists.
-
-### TLS
-
-For TLS to work, you need a certificate. A script to produce a self-signed
-certificate if available in the _bin_ folder.
+You can use the provided _bin/generate-self-signed-certificate.php_ file. 
 
 ```bash
 php ./bin/generate-self-signed-certificate.php > localhost.pem
 ```
 
-Of course, you can use any valid certificate you want.
-
-When instanciating the server class, pass the path to the certificate to the
-constructor:
+This implementation support basic directory indexing, but you need to enable it
+manually.
 
 ```php
-$server = new Server('127.0.0.1', 4587, '/home/user/gemini', '/home/user/certificate/pem');
+$server->enableDirectoryIndex(true);
 ```
+
+This implementation allows you to serve files from various file systems, 
+including the local file system as well as a FTP server, or even in-memory
+file system. Please look at the [league/flysystem](https://flysystem.thephpleague.com/v2/docs/) 
+documentation to find out which adapters you can use.
+
+Unless specified otherwise, the server will use the _LocalFilesystemAdapter_, 
+and will look for files in a _www_ folder located where you launched the server
+from.
+
+However, you can use a different adapter if you want:
+
+```php
+// Serving files on Gemini from a FTP site
+$adapter = new League\Flysystem\Ftp\FtpAdapter(
+    // Connection options
+    League\Flysystem\Ftp\FtpConnectionOptions::fromArray([
+        'host' => 'hostname', // required
+        'root' => '/root/path/', // required
+        'username' => 'username', // required
+        'password' => 'password', // required
+        'port' => 21
+    ])
+);
+
+$server->setFileSystemAdapter($adapter);
+```
+
+You can then start your server:
+
+```php
+$server->start();
+```
+
+You will need to use a process manager to ensure your server is kept running.
+You could use systemd or supervisor to do this. The documentation will soon be
+updated with some examples.
 
 ## Author
 
