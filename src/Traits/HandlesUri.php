@@ -76,15 +76,15 @@ trait HandlesUri
     protected function validateUri($uri)
     {
         if (!empty($uri->getUserInfo())) {
-            throw new SyntaxError('userinfo sub-component is not allowed');
+            throw new SyntaxError('Userinfo sub-component is not allowed');
         }
 
         if (empty($uri->getHost())) {
-            throw new SyntaxError('host sub-component is required');
+            throw new SyntaxError('Host sub-component is required');
         }
 
         if (mb_strlen((string) $uri, 'UTF-8') > 1024) {
-            throw new SyntaxError('uri is too long');
+            throw new SyntaxError('URL is too long');
         }
     }
 }

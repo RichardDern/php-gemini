@@ -4,6 +4,10 @@ declare(strict_types = 1);
 
 namespace RichardDern\Gemini;
 
+use League\Flysystem\Filesystem;
+use League\Flysystem\FilesystemAdapter;
+use League\Flysystem\Local\LocalFilesystemAdapter;
+use League\Flysystem\StorageAttributes;
 use Monolog\Logger;
 use React\EventLoop\Factory as LoopFactory;
 use React\Socket\ConnectionInterface;
@@ -41,13 +45,6 @@ class Server
     protected $port;
 
     /**
-     * Root directory of this server.
-     *
-     * @var string
-     */
-    protected $root;
-
-    /**
      * Visitor connection.
      */
     protected $connection;
@@ -59,34 +56,90 @@ class Server
      */
     protected $certPath;
 
-    // -------------------------------------------------------------------------
-    // ----[ Methods ]----------------------------------------------------------
+    /**
+     * Adapter used to interact with filesystem.
+     *
+     * @var League\Flysystem\FilesystemAdapter
+     */
+    protected $fileSystemAdapter;
+
+    /**
+     * File system to interact with.
+     *
+     * @var League\Flysystem\Filesystem
+     */
+    protected $fileSystem;
+
+    /**
+     * Boolean value indicating if we should auto-generate directory index.
+     * Defaults to false.
+     *
+     * @var bool
+     */
+    protected $enableDirectoryIndex = false;
+
     // -------------------------------------------------------------------------
 
     /**
      * Initialize a new Server instance.
      *
      * @param null|string $address
-     * @param array       $config  Server configuration
+     * @param null|int    $port
      */
-    public function __construct($address = null, int $port = 1965, string $root = './www', string $certPath = '../localhost.pem')
+    public function __construct($address = null, int $port = 1965, FilesystemAdapter $fileSystemAdapter = null, string $certPath = '../localhost.pem')
     {
         $this->prepareLogger('Server', Logger::DEBUG);
 
-        $this->address  = $address;
-        $this->port     = $port;
-        $this->root     = $root;
-        $this->certPath = $certPath;
+        $this->address           = $address;
+        $this->port              = $port;
+        $this->fileSystemAdapter = $fileSystemAdapter;
+        $this->certPath          = $certPath;
+
+        if (empty($this->fileSystemAdapter)) {
+            $this->fileSystemAdapter = new LocalFilesystemAdapter('./www');
+        }
+
+        $this->fileSystem = new Filesystem($this->fileSystemAdapter);
     }
+
+    // -------------------------------------------------------------------------
+    // ----[ Methods ]----------------------------------------------------------
+    // -------------------------------------------------------------------------
+
+    // ----[ Mutators ]---------------------------------------------------------
+
+    /**
+     * Should we automatically generate directory index ? Chainable method.
+     *
+     * @return self
+     */
+    public function enableDirectoryIndex(bool $enable = true)
+    {
+        $this->logger->debug('Enable Directory Index', ['enable' => $enable]);
+
+        $this->enableDirectoryIndex = $enable;
+
+        return $this;
+    }
+
+    // -------------------------------------------------------------------------
 
     /**
      * Start the server.
      */
     public function start()
     {
+        if (empty($this->certPath) || !\file_exists($this->certPath)) {
+            throw new \Exception('No certificate available');
+        }
+
+        $this->logger->info('Starting server', ['address'=> $this->address, 'port' => $this->port]);
+
         $this->createLoop();
 
         $server = $this->createSecureServer();
+
+        $this->logger->info('Waiting for connections');
 
         $server->on('connection', function (ConnectionInterface $connection) {
             $this->connection = $connection;
@@ -117,7 +170,9 @@ class Server
      */
     public function stop()
     {
-        $this->closeConnection(ResponseStatusCodes::SERVER_UNAVAILABLE, 'Server shutting down');
+        $this->logger->info('Stopping server');
+
+        $this->closeConnection(ResponseStatusCodes::SERVER_UNAVAILABLE, 'Server is shutting down');
     }
 
     /**
@@ -157,53 +212,28 @@ class Server
             try {
                 $uri = $this->parseUri($matches['url'], false);
             } catch (\Exception $ex) {
-                $uri = false;
+                $this->logger->error('Invalid URL', [$data]);
+
+                return $this->closeConnection(ResponseStatusCodes::BAD_REQUEST, 'Invalid URL');
             }
+        } else {
+            $this->logger->error('Missing URL', [$data]);
+
+            return $this->closeConnection(ResponseStatusCodes::BAD_REQUEST, 'URL is missing');
         }
 
-        if ($uri === false) {
-            return $this->closeConnection(ResponseStatusCodes::PERMANENT_FAILURE, 'Invalid URL');
-        }
+        try {
+            $this->validateUri($uri);
+        } catch (\Exception $ex) {
+            $this->logger->error('Invalid URL', [$data]);
 
-        if (mb_strlen((string) $uri) > 1024) {
-            return $this->closeConnection(ResponseStatusCodes::PERMANENT_FAILURE, 'URL too long');
+            return $this->closeConnection(ResponseStatusCodes::BAD_REQUEST, $ex->getMessage());
         }
 
         $host = $uri->getHost();
         $path = $uri->getPath();
-        $body = null;
 
-        $pathsToTry = [
-            sprintf('%s/%s/%s', $this->root, $host, $path),
-            sprintf('%s/%s/%s', $this->root, 'default', $path),
-        ];
-
-        foreach ($pathsToTry as $filepath) {
-            if (is_dir($filepath)) {
-                if (\file_exists($filepath.'/index.gmi')) {
-                    $body = \file_get_contents($filepath.'/index.gmi');
-
-                    break;
-                }
-                if (\file_exists($filepath.'/index.gemini')) {
-                    $body = \file_get_contents($filepath.'/index.gemini');
-
-                    break;
-                }
-            }
-
-            if (\file_exists($filepath)) {
-                $body = \file_get_contents($filepath);
-
-                break;
-            }
-        }
-
-        if (empty($body)) {
-            return $this->closeConnection(ResponseStatusCodes::NOT_FOUND, 'Not found');
-        }
-
-        return $this->closeConnection(ResponseStatusCodes::SUCCESS, 'text/gemini', $body);
+        $this->servePath($host, $path);
     }
 
     /**
@@ -254,5 +284,82 @@ class Server
         $this->logger->debug('Created Secure server');
 
         return $server;
+    }
+
+    /**
+     * Send an appropriate response to the client, base on request's host and
+     * path.
+     *
+     * @param mixed $host
+     * @param mixed $path
+     */
+    protected function servePath($host, $path)
+    {
+        $this->logger->debug('Serving request', ['host' => $host, 'path' => $path]);
+
+        $physicalPath = sprintf('%s/%s', $host, $path);
+
+        if (!$this->fileSystem->fileExists($physicalPath)) {
+            if ($this->enableDirectoryIndex) {
+                return $this->directoryIndex($host, $path);
+            }
+
+            $this->logger->error('Not found', ['host' => $host, 'path' => $path]);
+
+            return $this->closeConnection(ResponseStatusCodes::NOT_FOUND, 'Not found');
+        }
+
+        if (preg_match('/.*\.gemini$/', $path) || preg_match('/.*.\.gmi$/', $path)) {
+            $mimeType = 'text/gemini';
+        } else {
+            $mimeType = $this->fileSystem->mimeType($physicalPath);
+        }
+
+        $body = $this->fileSystem->read($physicalPath);
+
+        $this->closeConnection(ResponseStatusCodes::SUCCESS, $mimeType, $body);
+    }
+
+    /**
+     * Build a directory index. If no directory and no files exists in specified
+     * path, return a NOT_FOUND error. Otherwise, return a pre-built text/gemini
+     * file listing directories and files within specified path and host.
+     *
+     * @param mixed $host
+     * @param mixed $path
+     */
+    protected function directoryIndex($host, $path)
+    {
+        $this->logger->debug('Serving directory index', ['host' => $host, 'path' => $path]);
+
+        $physicalPath = sprintf('%s/%s', $host, $path);
+
+        $lines = [
+            sprintf('# %s: %s', $host, $path),
+        ];
+
+        $directories = $this->fileSystem->listContents($physicalPath)
+            ->filter(fn (StorageAttributes $attributes) => $attributes->isDir())
+            ->map(fn (StorageAttributes $attributes)    => str_replace($host.'/', '', $attributes->path()))
+            ->toArray();
+
+        $files = $this->fileSystem->listContents($physicalPath)
+            ->filter(fn (StorageAttributes $attributes) => $attributes->isFile())
+            ->map(fn (StorageAttributes $attributes)    => str_replace($host.'/', '', $attributes->path()))
+            ->toArray();
+
+        if (count($directories) === 0 && count($files) === 0) {
+            return $this->closeConnection(ResponseStatusCodes::NOT_FOUND, 'Not found');
+        }
+
+        foreach ($directories as $path) {
+            $lines[] = sprintf('=> %s %s', $path, basename($path));
+        }
+
+        foreach ($files as $path) {
+            $lines[] = sprintf('=> %s %s', $path, basename($path));
+        }
+
+        $this->closeConnection(ResponseStatusCodes::SUCCESS, 'text/gemini', implode("\n", $lines));
     }
 }
