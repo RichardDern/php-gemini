@@ -57,13 +57,6 @@ class Server
     protected $certPath;
 
     /**
-     * Adapter used to interact with filesystem.
-     *
-     * @var League\Flysystem\FilesystemAdapter
-     */
-    protected $fileSystemAdapter;
-
-    /**
      * File system to interact with.
      *
      * @var League\Flysystem\Filesystem
@@ -81,25 +74,18 @@ class Server
     // -------------------------------------------------------------------------
 
     /**
-     * Initialize a new Server instance.
+     * Initialize a new Server instance. You can optionally pass the address and
+     * the port the server should bind to.
      *
      * @param null|string $address
      * @param null|int    $port
      */
-    public function __construct($address = null, int $port = 1965, FilesystemAdapter $fileSystemAdapter = null, string $certPath = '../localhost.pem')
+    public function __construct($address = '127.0.0.1', int $port = 1965)
     {
         $this->prepareLogger('Server', Logger::DEBUG);
 
-        $this->address           = $address;
-        $this->port              = $port;
-        $this->fileSystemAdapter = $fileSystemAdapter;
-        $this->certPath          = $certPath;
-
-        if (empty($this->fileSystemAdapter)) {
-            $this->fileSystemAdapter = new LocalFilesystemAdapter('./www');
-        }
-
-        $this->fileSystem = new Filesystem($this->fileSystemAdapter);
+        $this->setAddress($address);
+        $this->setPort($port);
     }
 
     // -------------------------------------------------------------------------
@@ -109,15 +95,83 @@ class Server
     // ----[ Mutators ]---------------------------------------------------------
 
     /**
+     * Chainable method to specify on which address the server should listen.
+     * Defaults to 127.0.0.1.
+     *
+     * You can specify an IPv6 instead. In this case, it MUST be enclosed in
+     * square brackets.
+     *
+     * You could also specify a UNIX socket in the form unix:///path/to/file.
+     *
+     * @return self
+     */
+    public function setAddress(string $address = '127.0.0.1')
+    {
+        $this->logger->debug('Set binding address', [$address]);
+
+        $this->address = $address;
+
+        return $this;
+    }
+
+    /**
+     * Chainable method to specify which port the server should listen to.
+     * Defaults to 1965.
+     *
+     * @return self
+     */
+    public function setPort(int $port = 1965)
+    {
+        $this->logger->debug('Set binding port', [$port]);
+
+        $this->port = $port;
+
+        return $this;
+    }
+
+    /**
      * Should we automatically generate directory index ? Chainable method.
+     * Disabled by default.
      *
      * @return self
      */
     public function enableDirectoryIndex(bool $enable = true)
     {
-        $this->logger->debug('Enable Directory Index', ['enable' => $enable]);
+        $this->logger->debug('Enable Directory Index', ['Enable' => $enable]);
 
         $this->enableDirectoryIndex = $enable;
+
+        return $this;
+    }
+
+    /**
+     * Define which file system adapter to use to serve files.
+     *
+     * @return self
+     */
+    public function setFileSystemAdapter(FilesystemAdapter $adapter = null)
+    {
+        if (empty($adapter)) {
+            $adapter = new LocalFilesystemAdapter('./www');
+        }
+
+        $this->logger->debug('Defining file system adapter', [\get_class($adapter)]);
+
+        $this->fileSystem = new Filesystem($adapter);
+
+        return $this;
+    }
+
+    /**
+     * Define which certificate the server should use.
+     *
+     * @return self
+     */
+    public function setCertificatePath(string $path)
+    {
+        $this->logger->debug('Defining server certificate path', [$path]);
+
+        $this->certPath = $path;
 
         return $this;
     }
@@ -125,13 +179,32 @@ class Server
     // -------------------------------------------------------------------------
 
     /**
+     * Ensure required options are set. Chainable method. Throws exceptions
+     * when needed.
+     *
+     * @return self
+     */
+    public function runChecks()
+    {
+        $this->logger->debug('[Checks] Certificate file');
+
+        if (empty($this->certPath)) {
+            throw new \Exception('Path to serveur certificate was not set');
+        }
+
+        if (!\file_exists($this->certPath)) {
+            throw new \Exception('Server certificate does not exist');
+        }
+
+        return $this;
+    }
+
+    /**
      * Start the server.
      */
     public function start()
     {
-        if (empty($this->certPath) || !\file_exists($this->certPath)) {
-            throw new \Exception('No certificate available');
-        }
+        $this->runChecks();
 
         $this->logger->info('Starting server', ['address'=> $this->address, 'port' => $this->port]);
 
@@ -144,21 +217,38 @@ class Server
         $server->on('connection', function (ConnectionInterface $connection) {
             $this->connection = $connection;
 
+            $clientData = [
+                'remoteAddress' => $this->connection->getRemoteAddress(),
+                'localAddress'  => $this->connection->getLocalAddress(),
+            ];
+
+            $this->logger->debug('Client connected', $clientData);
+
             $this->connection->on('data', function ($data) {
-                $this->logger->debug('Incoming request', [$data]);
+                $this->logger->debug('Incoming request', [
+                    'Client' => $clientData,
+                    'Data'   => $data,
+                ]);
+
                 $this->handleInput($data);
             });
 
             $this->connection->on('end', function () {
-                $this->logger->debug('Transmission ended');
+                $this->logger->debug('Transmission ended', [
+                    'Client' => $clientData,
+                ]);
             });
 
             $this->connection->on('error', function (Exception $e) {
-                $this->logger->error($e->getMessage());
+                $this->logger->error($e->getMessage(), [
+                    'Client' => $clientData,
+                ]);
             });
 
             $this->connection->on('close', function () {
-                $this->logger->debug('Connection closed');
+                $this->logger->debug('Connection closed', [
+                    'Client' => $clientData,
+                ]);
             });
         });
 
@@ -193,6 +283,56 @@ class Server
         $this->logger->debug('Closing connection...');
 
         $this->connection->end();
+    }
+
+    /**
+     * Create the connection loop.
+     */
+    protected function createLoop()
+    {
+        $this->logger->debug('Creating request loop...');
+        $this->loop = LoopFactory::create();
+        $this->logger->debug('Created request loop');
+    }
+
+    /**
+     * Create the TCP connector.
+     */
+    protected function createTcpServer()
+    {
+        $this->logger->debug('Creating TCP server...');
+
+        $bind = '';
+
+        if (!empty($this->address)) {
+            $bind = $this->address.':';
+        }
+
+        $bind .= $this->port;
+
+        $server = new TcpServer($bind, $this->loop);
+
+        $this->logger->debug('Created TCP server', ['Bind' => $bind]);
+
+        return $server;
+    }
+
+    /**
+     * Create a secure connector.
+     */
+    protected function createSecureServer()
+    {
+        $this->logger->debug('Creating Secure Server...', [
+            'Certificate file' => $this->certPath,
+        ]);
+
+        $server = new SecureServer($this->createTcpServer(), $this->loop, [
+            'local_cert' => $this->certPath,
+        ]);
+
+        $this->logger->debug('Created Secure Server');
+
+        return $server;
     }
 
     /**
@@ -234,56 +374,6 @@ class Server
         $path = $uri->getPath();
 
         $this->servePath($host, $path);
-    }
-
-    /**
-     * Create the connection loop.
-     */
-    protected function createLoop()
-    {
-        $this->logger->debug('Creating request loop...');
-        $this->loop = LoopFactory::create();
-        $this->logger->debug('Created request loop');
-    }
-
-    /**
-     * Create the TCP connector.
-     */
-    protected function createTcpServer()
-    {
-        $this->logger->debug('Creating TCP server...');
-
-        $bind = '';
-
-        if (!empty($this->address)) {
-            $bind = $this->address.':';
-        }
-
-        $bind .= $this->port;
-
-        $server = new TcpServer($bind, $this->loop);
-
-        $this->logger->debug('Created TCP server', ['bind' => $bind]);
-
-        return $server;
-    }
-
-    /**
-     * Create a secure connector.
-     */
-    protected function createSecureServer()
-    {
-        $this->logger->debug('Creating Secure server...', [
-            'local_cert' => $this->certPath,
-        ]);
-
-        $server = new SecureServer($this->createTcpServer(), $this->loop, [
-            'local_cert' => $this->certPath,
-        ]);
-
-        $this->logger->debug('Created Secure server');
-
-        return $server;
     }
 
     /**

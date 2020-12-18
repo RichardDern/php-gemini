@@ -5,6 +5,7 @@ declare(strict_types = 1);
 namespace RichardDern\Gemini;
 
 use League\Uri\Uri;
+use Monolog\Logger;
 use React\EventLoop\Factory as LoopFactory;
 use React\Socket\ConnectionInterface;
 use React\Socket\Connector;
@@ -12,7 +13,6 @@ use RichardDern\Gemini\Exceptions\InvalidMetaException;
 use RichardDern\Gemini\Exceptions\InvalidStatusException;
 use RichardDern\Gemini\Traits\HandlesUri;
 use RichardDern\Gemini\Traits\Logs;
-use Monolog\Logger;
 
 /**
  * Interacts with a Gemini server.
@@ -181,8 +181,6 @@ class Client
         return $this;
     }
 
-    // -------------------------------------------------------------------------
-
     /**
      * Requests specified URI. Return server's response.
      *
@@ -238,6 +236,18 @@ class Client
         return $this->parseResponse();
     }
 
+    // -------------------------------------------------------------------------
+
+    /**
+     * Create the connection loop.
+     */
+    protected function createLoop()
+    {
+        $this->logger->debug('Creating request loop...');
+        $this->loop = LoopFactory::create();
+        $this->logger->debug('Created request loop');
+    }
+
     /**
      * Create a connector with appropriate settings.
      */
@@ -269,18 +279,6 @@ class Client
         $this->logger->debug(sprintf('Requested URI set: %s', (string) $this->requestedUri));
 
         return $this;
-    }
-
-    // -------------------------------------------------------------------------
-
-    /**
-     * Create the connection loop.
-     */
-    protected function createLoop()
-    {
-        $this->logger->debug('Creating request loop...');
-        $this->loop = LoopFactory::create();
-        $this->logger->debug('Created request loop');
     }
 
     /**
