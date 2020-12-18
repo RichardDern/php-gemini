@@ -124,6 +124,24 @@ server's root directory, files will be served from there.
 If there is no directory matching the hostname, the server will look for
 requested files in the _default_ directory, if it exists.
 
+### TLS
+
+For TLS to work, you need a certificate. A script to produce a self-signed
+certificate if available in the _bin_ folder.
+
+```bash
+php ./bin/generate-self-signed-certificate.php > localhost.pem
+```
+
+Of course, you can use any valid certificate you want.
+
+When instanciating the server class, pass the path to the certificate to the
+constructor:
+
+```php
+$server = new Server('127.0.0.1', 4587, '/home/user/gemini', '/home/user/certificate/pem');
+```
+
 ## Author
 
 Richard Dern - https://github.com/RichardDern
