@@ -3,6 +3,12 @@
 php-gemini is a library implementing the 
 [Project Gemini protocol](https://gemini.circumlunar.space), as both client and
 server-side.
+
+## Installation
+
+```bash
+composer require richarddern/php-gemini
+```
 
 ## Common features
 
