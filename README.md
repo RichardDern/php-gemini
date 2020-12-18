@@ -9,7 +9,7 @@ server-side.
 ```bash
 composer require richarddern/php-gemini
 ```
-
+
 ## Common features
 
 - Supports TLS from both client and server-side, thanks to [react/socket](https://reactphp.org/socket/)
@@ -18,6 +18,8 @@ case you don't or can't use an official one
 - URIs are parsed, validated, and resolved, so you can use relative
 URIs as well, thanks to [league/uri](https://uri.thephpleague.com)
 - Extensive logging, thanks to [monolog](https://github.com/Seldaek/monolog)
+- Filesystem abstraction provided by [league/flysystem](https://flysystem.thephpleague.com/v2/docs/)
+allowing you to serve files from the local file-system, FTP, AWS and even in-memory
 
 ## Client
 
