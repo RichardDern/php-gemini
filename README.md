@@ -108,3 +108,11 @@ will look for requested files:
 $server = new Server('127.0.0.1', 4587, '/home/user/gemini');
 $server->start();
 ```
+
+## Author
+
+Richard Dern - https://github.com/RichardDern
+
+## License
+
+MIT
