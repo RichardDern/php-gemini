@@ -109,6 +109,15 @@ $server = new Server('127.0.0.1', 4587, '/home/user/gemini');
 $server->start();
 ```
 
+### VirtualHosts
+
+A - very - basic virtual hosts system is provided. It works simply by looking at
+the host provided in the requested URL. If a directory with that name exists in
+server's root directory, files will be served from there. 
+
+If there is no directory matching the hostname, the server will look for
+requested files in the _default_ directory, if it exists.
+
 ## Author
 
 Richard Dern - https://github.com/RichardDern
