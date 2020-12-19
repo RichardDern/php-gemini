@@ -8,7 +8,6 @@ use League\Flysystem\Filesystem;
 use League\Flysystem\FilesystemAdapter;
 use League\Flysystem\Local\LocalFilesystemAdapter;
 use League\Flysystem\StorageAttributes;
-use Monolog\Logger;
 use React\EventLoop\Factory as LoopFactory;
 use React\Socket\ConnectionInterface;
 use React\Socket\SecureServer;
@@ -82,7 +81,7 @@ class Server
      */
     public function __construct($address = '127.0.0.1', int $port = 1965)
     {
-        $this->prepareLogger('Server', Logger::DEBUG);
+        $this->prepareLogger();
 
         $this->setAddress($address);
         $this->setPort($port);

@@ -144,6 +144,26 @@ You will need to use a process manager to ensure your server is kept running.
 You could use systemd or supervisor to do this. The documentation will soon be
 updated with some examples.
 
+### Logging
+
+Both client and server use the same methods to configure logging. You should set
+up logging to fit your needs right after you instanciated the client or the 
+server.
+
+```php
+$client = new Client();
+
+// You can define the log level
+$client->setLogLevel(Logger::DEBUG);
+
+// Here, we will define a simple StreamHandler, but we will choose where to log
+$handler = new StreamHandler('/var/log/gemini.log', Logger::INFO);
+$client->setLogHandler($handler);
+
+// The channel will help you find your way into the logs
+$client->setLogChannel('my-gemini-client');
+```
+
 ## Author
 
 Richard Dern - https://github.com/RichardDern

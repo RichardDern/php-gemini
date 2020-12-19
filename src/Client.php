@@ -5,7 +5,6 @@ declare(strict_types = 1);
 namespace RichardDern\Gemini;
 
 use League\Uri\Uri;
-use Monolog\Logger;
 use React\EventLoop\Factory as LoopFactory;
 use React\Socket\ConnectionInterface;
 use React\Socket\Connector;
@@ -108,7 +107,7 @@ class Client
      */
     public function __construct($server = null, int $port = 1965)
     {
-        $this->prepareLogger('Client', Logger::DEBUG);
+        $this->prepareLogger();
 
         $this->logger->debug('Booting client');
 
