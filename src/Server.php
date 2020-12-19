@@ -188,7 +188,7 @@ class Server
         $this->logger->debug('[Checks] Certificate file');
 
         if (empty($this->certPath)) {
-            throw new \Exception('Path to serveur certificate was not set');
+            throw new \Exception('Path to server certificate was not set');
         }
 
         if (!\file_exists($this->certPath)) {
