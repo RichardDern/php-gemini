@@ -10,5 +10,6 @@ require_once '../vendor/autoload.php';
 $server = new RichardDern\Gemini\Server();
 $server
     ->setCertificatePath('./localhost.pem')
+    ->setServedHosts(['localhost'])
     ->enableDirectoryIndex()
     ->start();
