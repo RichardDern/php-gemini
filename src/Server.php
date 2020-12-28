@@ -223,7 +223,7 @@ class Server
 
             $this->logger->debug('Client connected', $clientData);
 
-            $this->connection->on('data', function ($data) {
+            $this->connection->on('data', function ($data) use ($clientData) {
                 $this->logger->debug('Incoming request', [
                     'Client' => $clientData,
                     'Data'   => $data,
@@ -232,19 +232,19 @@ class Server
                 $this->handleInput($data);
             });
 
-            $this->connection->on('end', function () {
+            $this->connection->on('end', function () use ($clientData) {
                 $this->logger->debug('Transmission ended', [
                     'Client' => $clientData,
                 ]);
             });
 
-            $this->connection->on('error', function (Exception $e) {
+            $this->connection->on('error', function (Exception $e) use ($clientData) {
                 $this->logger->error($e->getMessage(), [
                     'Client' => $clientData,
                 ]);
             });
 
-            $this->connection->on('close', function () {
+            $this->connection->on('close', function () use ($clientData) {
                 $this->logger->debug('Connection closed', [
                     'Client' => $clientData,
                 ]);
