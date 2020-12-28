@@ -70,6 +70,16 @@ class Server
      */
     protected $enableDirectoryIndex = false;
 
+    /**
+     * Filenames considered as index files when requested path ends with a /.
+     *
+     * @var array
+     */
+    protected $indexes = [
+        'index.gemini',
+        'index.gmi',
+    ];
+
     // -------------------------------------------------------------------------
 
     /**
@@ -176,6 +186,23 @@ class Server
         return $this;
     }
 
+    /**
+     * Define which files are used as index when requested path ends with a
+     * trailing slash. Chainable method.
+     *
+     * Defaults to ['index.gemini', 'index.gmi']
+     *
+     * @return self
+     */
+    public function setIndexes(array $indexes)
+    {
+        $this->logger->debug('Defining index files', [$indexes]);
+
+        $this->indexes = $indexes;
+
+        return $this;
+    }
+
     // -------------------------------------------------------------------------
 
     /**
@@ -239,7 +266,7 @@ class Server
                 ]);
             });
 
-            $this->connection->on('error', function (Exception $e) use ($clientData) {
+            $this->connection->on('error', function (\Exception $e) use ($clientData) {
                 $this->logger->error($e->getMessage(), [
                     'Client' => $clientData,
                 ]);
@@ -420,9 +447,9 @@ class Server
      */
     protected function directoryIndex($host, $path)
     {
-        $this->logger->debug('Serving directory index', ['host' => $host, 'path' => $path]);
-
         $physicalPath = sprintf('%s/%s', $host, $path);
+
+        $this->logger->debug('Serving directory index', ['host' => $host, 'path' => $path, 'physicalPath' => $physicalPath]);
 
         $lines = [
             sprintf('# %s: %s', $host, $path),
@@ -449,6 +476,8 @@ class Server
         foreach ($files as $path) {
             $lines[] = sprintf('=> %s %s', $path, basename($path));
         }
+
+        $lines[] = "\n";
 
         $this->closeConnection(ResponseStatusCodes::SUCCESS, 'text/gemini', implode("\n", $lines));
     }
