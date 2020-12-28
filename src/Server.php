@@ -8,6 +8,7 @@ use League\Flysystem\Filesystem;
 use League\Flysystem\FilesystemAdapter;
 use League\Flysystem\Local\LocalFilesystemAdapter;
 use League\Flysystem\StorageAttributes;
+use League\Uri\UriInfo;
 use React\EventLoop\Factory as LoopFactory;
 use React\Socket\ConnectionInterface;
 use React\Socket\SecureServer;
@@ -80,6 +81,13 @@ class Server
         'index.gmi',
     ];
 
+    /**
+     * List of served hosts.
+     *
+     * @var array
+     */
+    protected $servedHosts = [];
+
     // -------------------------------------------------------------------------
 
     /**
@@ -119,7 +127,9 @@ class Server
     {
         $this->logger->debug('Set binding address', [$address]);
 
-        $this->address = $address;
+        $this->address       = $address;
+
+        $this->setServedHosts([$address]);
 
         return $this;
     }
@@ -199,6 +209,25 @@ class Server
         $this->logger->debug('Defining index files', [$indexes]);
 
         $this->indexes = $indexes;
+
+        return $this;
+    }
+
+    /**
+     * Register the list of hostnames to serve. Any request to none of these
+     * hosts will lead to a 53 error. Chainable method.
+     *
+     * @return self
+     */
+    public function setServedHosts(array $hosts)
+    {
+        foreach ($hosts as $host) {
+            if (!\in_array($host, $this->servedHosts)) {
+                $this->servedHosts[] = $host;
+            }
+        }
+
+        $this->logger->debug('Defining served hostnames', [$this->servedHosts]);
 
         return $this;
     }
@@ -397,7 +426,29 @@ class Server
             return $this->closeConnection(ResponseStatusCodes::BAD_REQUEST, $ex->getMessage());
         }
 
+        // At this point, URI must be absolute
+        if (!UriInfo::isAbsolutePath($uri)) {
+            return $this->closeConnection(ResponseStatusCodes::BAD_REQUEST, 'Invalid URL');
+        }
+
+        $port = $uri->getPort();
+
+        if ($port && $port !== $this->port) {
+            return $this->closeConnection(ResponseStatusCodes::PROXY_REQUEST_REFUSED, 'Proxy request refused');
+        }
+
         $host = $uri->getHost();
+
+        if (!in_array($host, $this->servedHosts)) {
+            return $this->closeConnection(ResponseStatusCodes::PROXY_REQUEST_REFUSED, 'Proxy request refused');
+        }
+
+        $scheme = $uri->getScheme();
+
+        if ($scheme !== 'gemini') {
+            return $this->closeConnection(ResponseStatusCodes::PROXY_REQUEST_REFUSED, 'Proxy request refused');
+        }
+
         $path = $uri->getPath();
 
         $this->servePath($host, $path);

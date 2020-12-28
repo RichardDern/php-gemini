@@ -30,6 +30,7 @@ trait HandlesUri
         if ($couldBeRelative) {
             return $this->resolveRelativeUri($uri);
         }
+
         if (\is_a($uri, \League\Uri\Uri::class)) {
             return $uri;
         }
@@ -81,6 +82,10 @@ trait HandlesUri
 
         if (empty($uri->getHost())) {
             throw new SyntaxError('Host sub-component is required');
+        }
+
+        if (empty($uri->getScheme())) {
+            throw new SyntaxError('Scheme sub-component is required');
         }
 
         if (mb_strlen((string) $uri, 'UTF-8') > 1024) {
