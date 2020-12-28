@@ -8,7 +8,6 @@ use League\Flysystem\Filesystem;
 use League\Flysystem\FilesystemAdapter;
 use League\Flysystem\Local\LocalFilesystemAdapter;
 use League\Flysystem\StorageAttributes;
-use League\Uri\UriInfo;
 use React\EventLoop\Factory as LoopFactory;
 use React\Socket\ConnectionInterface;
 use React\Socket\SecureServer;
@@ -406,7 +405,7 @@ class Server
 
         if (array_key_exists('url', $matches)) {
             try {
-                $uri = $this->parseUri($matches['url'], false);
+                $uri = $this->parseUri($matches['url'], true);
             } catch (\Exception $ex) {
                 $this->logger->error('Invalid URL', [$data]);
 
@@ -419,16 +418,11 @@ class Server
         }
 
         try {
-            $this->validateUri($uri);
+            $this->validateUri($uri, true);
         } catch (\Exception $ex) {
             $this->logger->error('Invalid URL', [$data]);
 
             return $this->closeConnection(ResponseStatusCodes::BAD_REQUEST, $ex->getMessage());
-        }
-
-        // At this point, URI must be absolute
-        if (!UriInfo::isAbsolutePath($uri)) {
-            return $this->closeConnection(ResponseStatusCodes::BAD_REQUEST, 'Invalid URL');
         }
 
         $port = $uri->getPort();

@@ -74,7 +74,7 @@ trait HandlesUri
      *
      * @throws League\Uri\Exceptions\SyntaxError
      */
-    protected function validateUri($uri)
+    protected function validateUri($uri, bool $shouldBeAbsolute = false)
     {
         if (!empty($uri->getUserInfo())) {
             throw new SyntaxError('Userinfo sub-component is not allowed');
@@ -90,6 +90,12 @@ trait HandlesUri
 
         if (mb_strlen((string) $uri, 'UTF-8') > 1024) {
             throw new SyntaxError('URL is too long');
+        }
+
+        if ($shouldBeAbsolute) {
+            if (!UriInfo::isAbsolute($uri) || \preg_match('#(\.\./)#', (string) $uri)) {
+                throw new SyntaxError('URL is not absolute');
+            }
         }
     }
 }
