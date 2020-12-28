@@ -85,6 +85,7 @@ class Server
 
         $this->setAddress($address);
         $this->setPort($port);
+        $this->setFileSystemAdapter();
     }
 
     // -------------------------------------------------------------------------
