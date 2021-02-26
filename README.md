@@ -1,3 +1,5 @@
+> Project moved to https://git.athaliasoft.com/richard/php-gemini !
+
 # php-gemini
 
 php-gemini is a library implementing the 
