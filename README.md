@@ -171,3 +171,7 @@ Richard Dern - https://github.com/RichardDern
 ## License
 
 MIT
+
+## Alternatives
+
+- [Ergol](http://adele.work/code/ergol/ergol.gmi) - Can use one cert per vhost, supports HTTP delivery with CSS
